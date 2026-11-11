@@ -1,0 +1,7 @@
+vehicle_id,capacity,start_depot_id,end_depot_id,max_route_duration_minutes,speed_kmh
+VEH_1,120,DEPOT_1,DEPOT_1,480,40.0
+VEH_2,100,DEPOT_1,DEPOT_1,480,40.0
+VEH_3,100,DEPOT_1,DEPOT_1,480,40.0
+VEH_4,110,DEPOT_2,DEPOT_2,480,40.0
+VEH_5,90,DEPOT_2,DEPOT_2,480,40.0
+

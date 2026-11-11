@@ -1,0 +1,4 @@
+depot_id,name,latitude,longitude,time_window_start,time_window_end
+DEPOT_1,North Central Hub,13.0100,77.5800,0,600
+DEPOT_2,South Logistics Hub,12.9150,77.6200,0,600
+
