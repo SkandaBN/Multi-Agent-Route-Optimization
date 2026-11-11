@@ -5,7 +5,7 @@ transit callbacks, OR-Tools Time dimension cumul variables, customer delivery
 time windows, depot operating hours, and vehicle maximum route durations.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
 from ortools.constraint_solver import pywrapcp
 
@@ -30,6 +30,7 @@ def _compute_planning_horizon(
     vehicles: Sequence[Vehicle],
     customers: Sequence[CustomerOrder],
     default_horizon_minutes: int,
+    vehicle_earliest_start_minutes: Mapping[str, int] | None = None,
 ) -> int:
     """Determine an upper-bound planning horizon covering all configured windows."""
     if default_horizon_minutes <= 0:
@@ -49,6 +50,8 @@ def _compute_planning_horizon(
     for vehicle in vehicles:
         if vehicle.max_route_duration_minutes is not None:
             explicit_upper_bounds.append(vehicle.max_route_duration_minutes)
+    if vehicle_earliest_start_minutes:
+        explicit_upper_bounds.extend(vehicle_earliest_start_minutes.values())
 
     return max(explicit_upper_bounds)
 
@@ -93,6 +96,7 @@ def solve_vrptw(
     default_horizon_minutes: int = DEFAULT_HORIZON_MINUTES,
     time_limit_seconds: int = 5,
     use_guided_local_search: bool = False,
+    vehicle_earliest_start_minutes: Mapping[str, int] | None = None,
 ) -> OptimizationResult:
     """Solve a single-depot or multi-depot VRPTW instance using Google OR-Tools."""
     prepared = prepare_base_routing_model(
@@ -102,11 +106,24 @@ def solve_vrptw(
         distance_provider=distance_provider,
     )
 
+    if vehicle_earliest_start_minutes:
+        known_vehicle_ids = {v.vehicle_id for v in prepared.vehicles}
+        for vid, start_min in vehicle_earliest_start_minutes.items():
+            if vid not in known_vehicle_ids:
+                raise InvalidRoutingInputError(
+                    f"vehicle_earliest_start_minutes references unknown vehicle '{vid}'."
+                )
+            if start_min < 0:
+                raise InvalidRoutingInputError(
+                    f"vehicle_earliest_start_minutes for '{vid}' cannot be negative ({start_min})."
+                )
+
     horizon = _compute_planning_horizon(
         prepared.active_depots,
         prepared.vehicles,
         prepared.customers,
         default_horizon_minutes,
+        vehicle_earliest_start_minutes=vehicle_earliest_start_minutes,
     )
 
     num_depots = len(prepared.active_depots)
@@ -160,15 +177,31 @@ def solve_vrptw(
         start_idx = prepared.routing.Start(vehicle_idx)
         end_idx = prepared.routing.End(vehicle_idx)
 
+        start_tw_start = start_depot.time_window_start
+        if (
+            vehicle_earliest_start_minutes
+            and vehicle.vehicle_id in vehicle_earliest_start_minutes
+        ):
+            start_tw_start = max(
+                start_tw_start, vehicle_earliest_start_minutes[vehicle.vehicle_id]
+            )
         start_tw_end = (
             start_depot.time_window_end if start_depot.time_window_end is not None else horizon
         )
         end_tw_end = (
             end_depot.time_window_end if end_depot.time_window_end is not None else horizon
         )
-        time_dimension.CumulVar(start_idx).SetRange(
-            start_depot.time_window_start, start_tw_end
-        )
+        if start_tw_start > start_tw_end:
+            raise InfeasibleRoutingError(
+                f"Vehicle {vehicle.vehicle_id} earliest start time ({start_tw_start}) "
+                f"exceeds depot '{start_depot.depot_id}' closing window ({start_tw_end})."
+            )
+        if start_tw_start > end_tw_end:
+            raise InfeasibleRoutingError(
+                f"Vehicle {vehicle.vehicle_id} earliest start time ({start_tw_start}) "
+                f"exceeds return depot '{end_depot.depot_id}' closing window ({end_tw_end})."
+            )
+        time_dimension.CumulVar(start_idx).SetRange(start_tw_start, start_tw_end)
         time_dimension.CumulVar(end_idx).SetRange(end_depot.time_window_start, end_tw_end)
 
         if vehicle.max_route_duration_minutes is not None:

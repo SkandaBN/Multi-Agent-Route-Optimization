@@ -111,9 +111,13 @@ def extract_vehicle_routes(
         if not ordered_customer_ids and not include_unused_vehicles:
             continue
 
+        depot_departure_time: int | None = None
+        depot_return_time: int | None = None
         total_route_duration: int | None = None
         if time_dimension is not None and start_cumul is not None:
             end_cumul = solution.Min(time_dimension.CumulVar(index))
+            depot_departure_time = start_cumul
+            depot_return_time = end_cumul
             total_route_duration = end_cumul - start_cumul
 
         routes.append(
@@ -127,6 +131,8 @@ def extract_vehicle_routes(
                 total_distance_meters=total_distance_meters,
                 total_distance_km=round(total_distance_meters / 1000.0, 4),
                 estimated_travel_time_minutes=estimated_travel_time_minutes,
+                depot_departure_time_minutes=depot_departure_time,
+                depot_return_time_minutes=depot_return_time,
                 total_route_duration_minutes=total_route_duration,
                 arrival_times_minutes=arrival_times if time_dimension is not None else None,
                 total_demand=total_demand,

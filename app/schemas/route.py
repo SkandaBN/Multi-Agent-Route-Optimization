@@ -30,6 +30,8 @@ class VehicleRoute(BaseModel):
     total_distance_meters: int = Field(..., ge=0)
     total_distance_km: float = Field(..., ge=0.0)
     estimated_travel_time_minutes: int = Field(..., ge=0)
+    depot_departure_time_minutes: int | None = None
+    depot_return_time_minutes: int | None = None
     total_route_duration_minutes: int | None = None
     arrival_times_minutes: dict[str, int] | None = None
     total_demand: int = Field(..., ge=0)

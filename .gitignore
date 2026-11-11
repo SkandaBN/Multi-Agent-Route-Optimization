@@ -7,6 +7,8 @@ env/
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
 
 # Python cache & artifacts
 __pycache__/

@@ -214,3 +214,113 @@ def test_vrptw_infeasible_max_route_duration_raises() -> None:
     with pytest.raises(InfeasibleRoutingError):
         solve_vrptw([depot], [vehicle], [customer])
 
+
+def test_vrptw_vehicle_earliest_start_minutes_targets_specific_vehicle() -> None:
+    """vehicle_earliest_start_minutes delays only the specified vehicle while preserving others."""
+    depot = Depot(
+        depot_id="DEPOT_1",
+        latitude=13.0,
+        longitude=77.5,
+        time_window_start=0,
+        time_window_end=480,
+    )
+    vehicles = [
+        Vehicle(
+            vehicle_id="V1",
+            capacity=30,
+            start_depot_id="DEPOT_1",
+            max_route_duration_minutes=480,
+            speed_kmh=40.0,
+        ),
+        Vehicle(
+            vehicle_id="V2",
+            capacity=30,
+            start_depot_id="DEPOT_1",
+            max_route_duration_minutes=480,
+            speed_kmh=40.0,
+        ),
+    ]
+    customers = [
+        CustomerOrder(
+            customer_id="C_EARLY",
+            latitude=13.02,
+            longitude=77.5,
+            demand=25,
+            service_duration_minutes=5,
+            time_window_start=0,
+            time_window_end=40,
+        ),
+        CustomerOrder(
+            customer_id="C_LATE",
+            latitude=13.0,
+            longitude=77.52,
+            demand=25,
+            service_duration_minutes=5,
+            time_window_start=60,
+            time_window_end=150,
+        ),
+    ]
+
+    result = solve_vrptw(
+        [depot],
+        vehicles,
+        customers,
+        vehicle_earliest_start_minutes={"V2": 45},
+    )
+    by_vehicle = {route.vehicle_id: route for route in result.routes}
+    assert by_vehicle["V1"].ordered_customer_ids == ["C_EARLY"]
+    assert by_vehicle["V1"].depot_departure_time_minutes == 0
+    assert by_vehicle["V1"].depot_return_time_minutes is not None
+
+    assert by_vehicle["V2"].ordered_customer_ids == ["C_LATE"]
+    assert by_vehicle["V2"].depot_departure_time_minutes is not None
+    assert by_vehicle["V2"].depot_departure_time_minutes >= 45
+    assert by_vehicle["V2"].depot_return_time_minutes is not None
+    assert (
+        by_vehicle["V2"].depot_return_time_minutes
+        > by_vehicle["V2"].depot_departure_time_minutes
+    )
+
+
+def test_vrptw_vehicle_earliest_start_infeasible_raises() -> None:
+    """Earliest start beyond depot close or violating customer window raises InfeasibleRoutingError."""
+    depot = Depot(
+        depot_id="DEPOT_1",
+        latitude=13.0,
+        longitude=77.5,
+        time_window_start=0,
+        time_window_end=120,
+    )
+    vehicle = Vehicle(
+        vehicle_id="V1",
+        capacity=50,
+        start_depot_id="DEPOT_1",
+        max_route_duration_minutes=120,
+        speed_kmh=40.0,
+    )
+    customer = CustomerOrder(
+        customer_id="C_TIGHT",
+        latitude=13.01,
+        longitude=77.5,
+        demand=10,
+        service_duration_minutes=5,
+        time_window_start=0,
+        time_window_end=40,
+    )
+
+    with pytest.raises(InfeasibleRoutingError):
+        solve_vrptw(
+            [depot],
+            [vehicle],
+            [customer],
+            vehicle_earliest_start_minutes={"V1": 150},
+        )
+
+    with pytest.raises(InfeasibleRoutingError):
+        solve_vrptw(
+            [depot],
+            [vehicle],
+            [customer],
+            vehicle_earliest_start_minutes={"V1": 60},
+        )
+
